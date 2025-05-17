@@ -1,5 +1,5 @@
 from __future__ import annotations
-from abc import abstractmethod, ABC
+from abc import abstractmethod
 import numpy as np
 from numpy import ndarray
 
@@ -22,7 +22,7 @@ class LightSource:
     def __init__(self, intensity):
         self.intensity = intensity
 
-    # This function returns the ray that goes from the light source to a point
+    # This function returns the ray that goes from a point to the light source
     @abstractmethod
     def get_light_ray(self, intersection_point) -> Ray:
         pass
@@ -45,12 +45,11 @@ class DirectionalLight(LightSource):
 
     # This function returns the ray that goes from the light source to a point
     def get_light_ray(self, intersection_point):
-        v = -normalize(self.direction)
-        return Ray(intersection_point, v)
+        return Ray(intersection_point, -normalize(self.direction))
 
     # This function returns the distance from a point to the light source
     def get_distance_from_light(self, intersection):
-        return np.inf
+        return np.dot(intersection, self.direction)
 
     # This function returns the light intensity at a point
     def get_intensity(self, intersection):
@@ -154,6 +153,7 @@ class Plane(Object3D):
     def intersect(self, ray: Ray):
         v = self.point - ray.origin
         t = np.dot(v, self.normal) / (np.dot(self.normal, ray.direction) + 1e-6)
+
         if t > 0:
             return self, t, self.normal
         else:
@@ -177,15 +177,38 @@ class Triangle(Object3D):
         self.b = np.array(b)
         self.c = np.array(c)
         self.normal = self.compute_normal()
+        self.area = self.compute_area()
 
-    # computes normal to the trainagle surface. Pay attention to its direction!
+    # Computes normal to the triangle surface. Pay attention to its direction!
     def compute_normal(self):
-        # TODO
-        pass
+        ab = self.b - self.a
+        ac = self.c - self.a
+        return normalize(np.cross(ab, ac))
 
     def intersect(self, ray: Ray):
-        # TODO
-        pass
+        v = self.a - ray.origin
+        t = np.dot(v, self.normal) / (np.dot(self.normal, ray.direction) + 1e-6)
+
+        if t <= 0:
+            return None, None, None
+
+        p = ray.origin + t * ray.direction
+        pa = self.a - p
+        pb = self.b - p
+        pc = self.c - p
+        alpha = np.dot(self.normal, np.cross(pb, pc)) / (2 * self.area)
+        beta = np.dot(self.normal, np.cross(pc, pa)) / (2 * self.area)
+        gamma = 1 - alpha - beta
+
+        if 0 <= alpha <= 1 and 0 <= beta <= 1 and 0 <= gamma <= 1:
+            return self, t, self.normal
+
+        return None, None, None
+
+    def compute_area(self):
+        ab = self.b - self.a
+        ac = self.c - self.a
+        return np.linalg.norm(np.cross(ab, ac)) / 2
 
 
 class Diamond(Object3D):
@@ -263,14 +286,16 @@ def get_color(ray: Ray, ambient, lights: list[LightSource], objects: list[Object
     color = obj.ambient * ambient
 
     for light in lights:
-        light_ray = light.get_light_ray(hit)
-        shadowing_obj, _, _ = light_ray.nearest_intersected_object(objects)
+        shadow_ray = light.get_light_ray(hit + N * 1e-4)
+        shadow_obj, shadow_t, _ = shadow_ray.nearest_intersected_object(objects)
+        light_distance = light.get_distance_from_light(hit)
+        shadow_distance = light.get_distance_from_light(shadow_ray.origin + shadow_t * shadow_ray.direction)
 
-        if shadowing_obj != obj:
+        if shadow_obj is not None and shadow_distance < light_distance:
             continue
 
         intensity = light.get_intensity(hit)
-        L = normalize(light_ray.direction)
+        L = normalize(shadow_ray.direction)
         R = reflected(-L, N)
 
         diffuse = obj.diffuse * intensity * max(0, np.dot(L, N))
