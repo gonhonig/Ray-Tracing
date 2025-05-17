@@ -109,18 +109,20 @@ class Ray:
 
     # The function is getting the collection of objects in the scene and looks for the one with minimum distance.
     # The function should return the nearest object and its distance (in two different arguments)
-    def nearest_intersected_object(self, objects: list[Object3D]) -> (Object3D, float):
+    def nearest_intersected_object(self, objects: list[Object3D]) -> (Object3D, float, ndarray):
         intersections = None
-        nearest_object: Surface = None
+        nearest_object: Object3D = None
         min_distance = np.inf
+        nearest_object_normal = None
 
         for obj in objects:
-            distance, intersected_obj = obj.intersect(self)
+            intersected_obj, distance, normal = obj.intersect(self)
             if distance is not None and distance < min_distance:
                 min_distance = distance
                 nearest_object = intersected_obj
+                nearest_object_normal = normal
 
-        return nearest_object, min_distance
+        return nearest_object, min_distance, nearest_object_normal
 
 
 class Object3D:
@@ -139,11 +141,7 @@ class Object3D:
         self.reflection = reflection
 
     @abstractmethod
-    def intersect(self, ray: Ray) -> (float, Object3D):
-        pass
-
-    @abstractmethod
-    def get_normal(self, intersection):
+    def intersect(self, ray: Ray) -> (Object3D, float, ndarray):
         pass
 
 
@@ -157,12 +155,9 @@ class Plane(Object3D):
         v = self.point - ray.origin
         t = np.dot(v, self.normal) / (np.dot(self.normal, ray.direction) + 1e-6)
         if t > 0:
-            return t, self
+            return self, t, self.normal
         else:
-            return None, None
-
-    def get_normal(self, intersection):
-        return self.normal
+            return None, None, None
 
 
 class Triangle(Object3D):
@@ -259,25 +254,23 @@ class Sphere(Object3D):
 
 def get_color(ray: Ray, ambient, lights: list[LightSource], objects: list[Object3D], level: int):
     color = np.zeros(3)
-    obj, t = ray.nearest_intersected_object(objects)
+    obj, t, N = ray.nearest_intersected_object(objects)
 
     if obj is None:
         return color
 
     hit = ray.origin + t * ray.direction
-    N = obj.get_normal(hit)
     color = obj.ambient * ambient
 
     for light in lights:
         light_ray = light.get_light_ray(hit)
-        shadowing_obj, _ = light_ray.nearest_intersected_object(objects)
+        shadowing_obj, _, _ = light_ray.nearest_intersected_object(objects)
 
         if shadowing_obj != obj:
             continue
 
         intensity = light.get_intensity(hit)
         L = normalize(light_ray.direction)
-        R_1 = L + 2 * np.dot(L, N) * N
         R = reflected(-L, N)
 
         diffuse = obj.diffuse * intensity * max(0, np.dot(L, N))
