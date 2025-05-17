@@ -1,4 +1,7 @@
+from __future__ import annotations
+from abc import abstractmethod, ABC
 import numpy as np
+from numpy import ndarray
 
 
 # This function gets a vector and returns its normalized form.
@@ -9,9 +12,8 @@ def normalize(vector):
 # This function gets a vector and the normal of the surface it hit
 # This function returns the vector that reflects from the surface
 def reflected(vector, axis):
-    # TODO:
-    v = np.array([0,0,0])
-    return v
+    return vector - 2 * np.dot(vector, axis) * axis
+
 
 ## Lights
 
@@ -20,27 +22,39 @@ class LightSource:
     def __init__(self, intensity):
         self.intensity = intensity
 
-
-class DirectionalLight(LightSource):
-
-    def __init__(self, intensity, direction):
-        super().__init__(intensity)
-        # TODO
-
     # This function returns the ray that goes from the light source to a point
-    def get_light_ray(self,intersection_point):
-        # TODO
-        return Ray()
+    @abstractmethod
+    def get_light_ray(self, intersection_point) -> Ray:
+        pass
 
     # This function returns the distance from a point to the light source
+    @abstractmethod
     def get_distance_from_light(self, intersection):
-        #TODO
         pass
 
     # This function returns the light intensity at a point
+    @abstractmethod
     def get_intensity(self, intersection):
-        #TODO
         pass
+
+
+class DirectionalLight(LightSource):
+    def __init__(self, intensity, direction):
+        super().__init__(intensity)
+        self.direction = direction
+
+    # This function returns the ray that goes from the light source to a point
+    def get_light_ray(self, intersection_point):
+        v = -normalize(self.direction)
+        return Ray(intersection_point, v)
+
+    # This function returns the distance from a point to the light source
+    def get_distance_from_light(self, intersection):
+        return np.inf
+
+    # This function returns the light intensity at a point
+    def get_intensity(self, intersection):
+        return self.intensity
 
 
 class PointLight(LightSource):
@@ -52,57 +66,71 @@ class PointLight(LightSource):
         self.kq = kq
 
     # This function returns the ray that goes from a point to the light source
-    def get_light_ray(self,intersection):
+    def get_light_ray(self, intersection):
         return Ray(intersection, normalize(self.position - intersection))
 
     # This function returns the distance from a point to the light source
-    def get_distance_from_light(self,intersection):
-        #TODO
-        pass
+    def get_distance_from_light(self, intersection):
+        return np.linalg.norm(self.position - intersection)
 
     # This function returns the light intensity at a point
     def get_intensity(self, intersection):
-        # calculate distance between light source and intersection 
         # calculate and return the light intensity based on kc, kl, kq
-        #TODO
-        pass
+        d = self.get_distance_from_light(intersection)
+        return self.intensity / (self.kc + self.kl * d + self.kq * (d ** 2) + 1e-4)
 
 
 class SpotLight(LightSource):
     def __init__(self, intensity, position, direction, kc, kl, kq):
         super().__init__(intensity)
-        # TODO
+        self.position = np.array(position)
+        self.direction = normalize(np.array(direction))
+        self.kc = kc
+        self.kl = kl
+        self.kq = kq
 
     # This function returns the ray that goes from the light source to a point
     def get_light_ray(self, intersection):
-        #TODO
-        pass
+        return Ray(intersection, normalize(self.position - intersection))
 
     def get_distance_from_light(self, intersection):
-        #TODO
-        pass
+        return np.linalg.norm(self.position - intersection)
 
     def get_intensity(self, intersection):
-        #TODO
-        pass
+        v = normalize(intersection - self.position)
+        d = self.get_distance_from_light(intersection)
+        return (self.intensity * v.dot(self.direction)) / (self.kc + self.kl * d + self.kq * (d ** 2))
 
 
 class Ray:
     def __init__(self, origin, direction):
         self.origin = origin
-        self.direction = direction
+        self.direction = normalize(direction)
 
     # The function is getting the collection of objects in the scene and looks for the one with minimum distance.
     # The function should return the nearest object and its distance (in two different arguments)
-    def nearest_intersected_object(self, objects):
+    def nearest_intersected_object(self, objects: list[Object3D]) -> (Object3D, float):
         intersections = None
-        nearest_object = None
+        nearest_object: Surface = None
         min_distance = np.inf
-        #TODO
+
+        for obj in objects:
+            distance, intersected_obj = obj.intersect(self)
+            if distance is not None and distance < min_distance:
+                min_distance = distance
+                nearest_object = intersected_obj
+
         return nearest_object, min_distance
 
 
 class Object3D:
+    def __init__(self):
+        self.ambient = None
+        self.diffuse = None
+        self.specular = None
+        self.shininess = None
+        self.reflection = None
+
     def set_material(self, ambient, diffuse, specular, shininess, reflection):
         self.ambient = ambient
         self.diffuse = diffuse
@@ -110,9 +138,18 @@ class Object3D:
         self.shininess = shininess
         self.reflection = reflection
 
+    @abstractmethod
+    def intersect(self, ray: Ray) -> (float, Object3D):
+        pass
+
+    @abstractmethod
+    def get_normal(self, intersection):
+        pass
+
 
 class Plane(Object3D):
     def __init__(self, normal, point):
+        super(Object3D).__init__()
         self.normal = np.array(normal)
         self.point = np.array(point)
 
@@ -122,20 +159,25 @@ class Plane(Object3D):
         if t > 0:
             return t, self
         else:
-            return None
+            return None, None
+
+    def get_normal(self, intersection):
+        return self.normal
 
 
 class Triangle(Object3D):
-    """
+    r"""
         C
         /\
        /  \
     A /____\ B
 
-    The fornt face of the triangle is A -> B -> C.
-    
+    The front face of the triangle is A -> B -> C.
+
     """
+
     def __init__(self, a, b, c):
+        super().__init__()
         self.a = np.array(a)
         self.b = np.array(b)
         self.c = np.array(c)
@@ -150,24 +192,25 @@ class Triangle(Object3D):
         # TODO
         pass
 
+
 class Diamond(Object3D):
-    """     
-            D
-            /\*\
-           /==\**\
-         /======\***\
-       /==========\***\
-     /==============\****\
-   /==================\*****\
-A /&&&&&&&&&&&&&&&&&&&&\ B &&&/ C
-   \==================/****/
-     \==============/****/
-       \==========/****/
-         \======/***/
-           \==/**/
-            \/*/
-             E 
-    
+    r"""
+                D
+                /\*\
+               /==\**\
+             /======\***\
+           /==========\***\
+         /==============\****\
+       /==================\*****\
+    A /&&&&&&&&&&&&&&&&&&&&\ B &&&/ C
+       \==================/****/
+         \==============/****/
+           \==========/****/
+             \======/***/
+               \==/**/
+                \/*/
+                 E
+
     Similar to Traingle, every from face of the diamond's faces are:
         A -> B -> D
         B -> C -> D
@@ -176,19 +219,21 @@ A /&&&&&&&&&&&&&&&&&&&&\ B &&&/ C
         E -> C -> B
         C -> E -> A
     """
+
     def __init__(self, v_list):
+        super().__init__()
         self.v_list = v_list
         self.triangle_list = self.create_triangle_list()
 
     def create_triangle_list(self):
         l = []
         t_idx = [
-                [0,1,3],
-                [1,2,3],
-                [0,3,2],
-                 [4,1,0],
-                 [4,2,1],
-                 [2,4,0]]
+            [0, 1, 3],
+            [1, 2, 3],
+            [0, 3, 2],
+            [4, 1, 0],
+            [4, 2, 1],
+            [2, 4, 0]]
         # TODO
         return l
 
@@ -200,12 +245,43 @@ A /&&&&&&&&&&&&&&&&&&&&\ B &&&/ C
         # TODO
         pass
 
+
 class Sphere(Object3D):
     def __init__(self, center, radius: float):
+        super().__init__()
         self.center = center
         self.radius = radius
 
     def intersect(self, ray: Ray):
-        #TODO
+        # TODO
         pass
 
+
+def get_color(ray: Ray, ambient, lights: list[LightSource], objects: list[Object3D], level: int):
+    color = np.zeros(3)
+    obj, t = ray.nearest_intersected_object(objects)
+
+    if obj is None:
+        return color
+
+    hit = ray.origin + t * ray.direction
+    N = obj.get_normal(hit)
+    color = obj.ambient * ambient
+
+    for light in lights:
+        light_ray = light.get_light_ray(hit)
+        shadowing_obj, _ = light_ray.nearest_intersected_object(objects)
+
+        if shadowing_obj != obj:
+            continue
+
+        intensity = light.get_intensity(hit)
+        L = normalize(light_ray.direction)
+        R_1 = L + 2 * np.dot(L, N) * N
+        R = reflected(-L, N)
+
+        diffuse = obj.diffuse * intensity * max(0, np.dot(L, N))
+        specular = obj.specular * intensity * max(0, np.dot(R, normalize(ray.direction)) ** obj.shininess)
+        color += diffuse + specular
+
+    return  color

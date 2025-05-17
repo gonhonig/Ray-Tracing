@@ -16,11 +16,8 @@ def render_scene(camera, ambient, lights, objects, screen_size, max_depth):
             direction = normalize(pixel - origin)
             ray = Ray(origin, direction)
 
-            color = np.zeros(3)
-
             # This is the main loop where each pixel color is computed.
-            # TODO
-
+            color = get_color(ray, ambient, lights, objects, max_depth)
             
             # We clip the values between 0 and 1 so all pixel values will make sense.
             image[i, j] = np.clip(color,0,1)
