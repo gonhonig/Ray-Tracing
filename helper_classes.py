@@ -96,7 +96,7 @@ class SpotLight(LightSource):
         return np.linalg.norm(self.position - intersection)
 
     def get_intensity(self, intersection):
-        v = normalize(intersection - self.position)
+        v = normalize(self.position - intersection)
         d = self.get_distance_from_light(intersection)
         return (self.intensity * v.dot(self.direction)) / (self.kc + self.kl * d + self.kq * (d ** 2))
 
