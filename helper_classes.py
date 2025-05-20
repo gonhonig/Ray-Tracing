@@ -98,7 +98,7 @@ class SpotLight(LightSource):
     def get_intensity(self, intersection):
         v = normalize(self.position - intersection)
         d = self.get_distance_from_light(intersection)
-        return (self.intensity * v.dot(self.direction)) / (self.kc + self.kl * d + self.kq * (d ** 2))
+        return (self.intensity * max(0, v.dot(self.direction))) / (self.kc + self.kl * d + self.kq * (d ** 2))
 
 
 class Ray:
@@ -131,13 +131,15 @@ class Object3D:
         self.specular = None
         self.shininess = None
         self.reflection = None
+        self.refraction = None
 
-    def set_material(self, ambient, diffuse, specular, shininess, reflection):
-        self.ambient = ambient
-        self.diffuse = diffuse
-        self.specular = specular
+    def set_material(self, ambient, diffuse, specular, shininess, reflection, refraction = 0):
+        self.ambient = np.array(ambient, dtype=np.float64)
+        self.diffuse = np.array(diffuse, dtype=np.float64)
+        self.specular = np.array(specular, dtype=np.float64)
         self.shininess = shininess
         self.reflection = reflection
+        self.refraction = refraction
 
     @abstractmethod
     def intersect(self, ray: Ray) -> (Object3D, float, ndarray):
@@ -311,21 +313,27 @@ def get_color(ray: Ray, ambient, lights: list[LightSource], objects: list[Object
     if obj is None:
         return color
 
+    if np.dot(ray.direction, N) > 0:
+        N = -N
+
     hit = ray.origin + t * ray.direction + N * 1e-4
-    color = np.array(obj.ambient * ambient, dtype=np.float64)
+    color = obj.ambient * ambient
 
     for light in lights:
         shadow_ray = light.get_light_ray(hit)
         shadow_obj, shadow_t, shadow_N = shadow_ray.nearest_intersected_object(objects)
+        shadow_factor = 1
 
         if shadow_obj is not None:
             shadow_hit = shadow_ray.origin + shadow_t * shadow_ray.direction + shadow_N * 1e-4
             light_distance = light.get_distance_from_light(hit)
             shadow_distance = np.linalg.norm(hit - shadow_hit)
             if shadow_distance < light_distance:
-                continue
+                if shadow_obj.refraction == 0:
+                    continue
+                shadow_factor = shadow_obj.refraction
 
-        intensity = light.get_intensity(hit)
+        intensity = shadow_factor * light.get_intensity(hit)
         L = shadow_ray.direction
         R = reflected(-L, N)
 
@@ -333,8 +341,13 @@ def get_color(ray: Ray, ambient, lights: list[LightSource], objects: list[Object
         specular = obj.specular * intensity * max(0, np.dot(R, ray.direction) ** obj.shininess)
         color += diffuse + specular
 
-    if level > 1 and obj.reflection > 0:
-        reflected_ray = Ray(hit + N * 1e-4, normalize(reflected(ray.direction, N)))
-        color += obj.reflection * get_color(reflected_ray, ambient, lights, objects, level - 1)
+    if level > 1:
+        if obj.reflection > 0:
+            reflected_ray = Ray(hit, normalize(reflected(ray.direction, N)))
+            color += obj.reflection * get_color(reflected_ray, ambient, lights, objects, level - 1)
+        if obj.refraction > 0:
+            hit_inner = ray.origin + t * ray.direction - N * 1e-4
+            refracted_ray = Ray(hit_inner, ray.direction)
+            color = (1 - obj.refraction) * color + obj.refraction * get_color(refracted_ray, ambient, lights, objects, level - 1)
 
     return  color
