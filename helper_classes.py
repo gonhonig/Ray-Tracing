@@ -1,7 +1,4 @@
-from __future__ import annotations
-from abc import abstractmethod
 import numpy as np
-from numpy import ndarray
 
 
 # This function gets a vector and returns its normalized form.
@@ -21,21 +18,6 @@ def reflected(vector, axis):
 class LightSource:
     def __init__(self, intensity):
         self.intensity = intensity
-
-    # This function returns the ray that goes from a point to the light source
-    @abstractmethod
-    def get_light_ray(self, intersection_point) -> Ray:
-        pass
-
-    # This function returns the distance from a point to the light source
-    @abstractmethod
-    def get_distance_from_light(self, intersection):
-        pass
-
-    # This function returns the light intensity at a point
-    @abstractmethod
-    def get_intensity(self, intersection):
-        pass
 
 
 class DirectionalLight(LightSource):
@@ -108,7 +90,7 @@ class Ray:
 
     # The function is getting the collection of objects in the scene and looks for the one with minimum distance.
     # The function should return the nearest object and its distance (in two different arguments)
-    def nearest_intersected_object(self, objects: list[Object3D]) -> (Object3D, float, ndarray):
+    def nearest_intersected_object(self, objects: list['Object3D']) -> ('Object3D', float, np.ndarray):
         intersections = None
         nearest_object: Object3D = None
         min_distance = np.inf
@@ -125,25 +107,13 @@ class Ray:
 
 
 class Object3D:
-    def __init__(self):
-        self.ambient = None
-        self.diffuse = None
-        self.specular = None
-        self.shininess = None
-        self.reflection = None
-        self.refraction = None
-
     def set_material(self, ambient, diffuse, specular, shininess, reflection, refraction = 0):
-        self.ambient = np.array(ambient, dtype=np.float64)
-        self.diffuse = np.array(diffuse, dtype=np.float64)
-        self.specular = np.array(specular, dtype=np.float64)
+        self.ambient = ambient
+        self.diffuse = diffuse
+        self.specular = specular
         self.shininess = shininess
         self.reflection = reflection
         self.refraction = refraction
-
-    @abstractmethod
-    def intersect(self, ray: Ray) -> (Object3D, float, ndarray):
-        pass
 
 
 class Plane(Object3D):
@@ -317,7 +287,9 @@ def get_color(ray: Ray, ambient, lights: list[LightSource], objects: list[Object
         N = -N
 
     hit = ray.origin + t * ray.direction + N * 1e-4
-    color = obj.ambient * ambient
+    color = np.asarray(obj.ambient, dtype=np.float64) * ambient
+    obj_diffuse = np.asarray(obj.diffuse, dtype=np.float64)
+    obj_specular = np.asarray(obj.specular, dtype=np.float64)
 
     for light in lights:
         shadow_ray = light.get_light_ray(hit)
@@ -337,8 +309,8 @@ def get_color(ray: Ray, ambient, lights: list[LightSource], objects: list[Object
         L = shadow_ray.direction
         R = reflected(-L, N)
 
-        diffuse = obj.diffuse * intensity * max(0, np.dot(L, N))
-        specular = obj.specular * intensity * max(0, np.dot(R, ray.direction) ** obj.shininess)
+        diffuse = obj_diffuse * intensity * max(0, np.dot(L, N))
+        specular = obj_specular * intensity * max(0, np.dot(R, ray.direction) ** obj.shininess)
         color += diffuse + specular
 
     if level > 1:
