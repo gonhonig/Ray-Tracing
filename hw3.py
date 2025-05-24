@@ -61,30 +61,17 @@ def your_own_scene():
     return camera, lights, objects
 
 
-def your_own_scene1():
-    camera = np.array([0,0,1])
+def render_triangle_mesh(triangles, screen_size, max_depth):
+    camera = np.array([0, 0, 1])
+    ambient = np.array([0.5, 0.5, 0.5])
 
     floor = Plane([0, 1, 0], [0, -1, 0])
     floor.set_material([0.2, 0.2, 0.2], [0.2, 0.2, 0.2], [1, 1, 1], 1000, 0.5)
-    background = Plane([0, 0, 1], [0, 0, -3])
-    background.set_material([0.2, 0.2, 0.2], [0.2, 0.2, 0.2], [0.2, 0.2, 0.2], 1000, 0)
 
-    sphere_a = Sphere([0, 0.2, -0.2], 0.5)
-    sphere_a.set_material([1, 0, 0], [0, 0, 0.7], [0.3, 0.3, 0.3], 100, 1, 1)
+    light_a = PointLight(intensity=np.array([1, 1, 1]), position=np.array([1, 1.5, 1]), kc=0.1, kl=0.1, kq=0.1)
+    light_b = PointLight(intensity=np.array([0.5, 0.5, 0.5]), position=np.array([-3, -1, 3]), kc=0.1, kl=0.1, kq=0.1)
+    lights = [light_a, light_b]
 
-    sphere_b = Sphere([0, 0.2, -0.2], 0.2)
-    sphere_b.set_material([1, 1, 1], [0.7, 0.7, 0.7], [0.3, 0.3, 0.3], 100, 1)
+    objects = triangles + [floor]
 
-    triangle = Triangle([-1,-1,-1],
-                        [1,0,-1],
-                        [0,1,-1])
-    triangle.set_material([1, 0, 0], [0, 0, 0.7], [0.3, 0.3, 0.3], 100, 1, 0.7)
-
-    light_a = PointLight(intensity=np.array([2, 2, 2]), position=np.array([1, 1.5, 1]), kc=0.1, kl=0.1, kq=0.1)
-    light_b = SpotLight(intensity=np.array([0, 1, 0]), position=np.array([-0.5, 0.5, 0]), direction=([0, 0, 1]),
-                        kc=0.1, kl=0.1, kq=0.1)
-
-    lights = [light_a]
-    objects = [floor, triangle, background]
-
-    return camera, lights, objects
+    return render_scene(camera, ambient, lights, objects, screen_size, max_depth)
